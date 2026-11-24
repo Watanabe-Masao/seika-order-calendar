@@ -192,10 +192,13 @@ def main() -> int:
     else:
         data["updated_at"] = prev.get("updated_at", now.isoformat(timespec="seconds"))
 
+    # 元データの ics は取得時刻（DTSTAMP）が毎回変わるため、中身が変わったときだけ保存する
     if not args.offline:
         RAW_DIR.mkdir(parents=True, exist_ok=True)
         for key, text in texts.items():
-            (RAW_DIR / f"{key}.ics").write_text(text, encoding="utf-8")
+            raw = RAW_DIR / f"{key}.ics"
+            if changed or not raw.exists():
+                raw.write_text(text, encoding="utf-8")
 
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(json.dumps(data, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
