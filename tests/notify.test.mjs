@@ -11,6 +11,7 @@ test("お盆前：前日の配信（8/11）", () => {
   assert.equal(m, [
     "【青果 発注のお知らせ】",
     "明日 8/12(木) は 🟧★4日分 の発注",
+    "※いつもは1日分です（8/14(土)・8/16(月) 休市のため）",
     "8/13(金)〜8/15(日) は発注ありません",
     "",
     "次回の発注は 8/16(月)  2日分発注",
@@ -20,7 +21,7 @@ test("お盆前：前日の配信（8/11）", () => {
 
 test("お盆前：当日の配信（8/12）", () => {
   const m = buildMessage(cal, "2027-08-12", "day");
-  assert.match(m, /^【青果 発注のお知らせ】\n本日 8\/12\(木\) は 🟧★4日分 の発注\n明日から 8\/15\(日\) まで発注ありません\n\n次回の発注は 8\/16\(月\)  2日分発注\n/);
+  assert.match(m, /^【青果 発注のお知らせ】\n本日 8\/12\(木\) は 🟧★4日分 の発注\n※いつもは1日分です（8\/14\(土\)・8\/16\(月\) 休市のため）\n明日から 8\/15\(日\) まで発注ありません\n\n次回の発注は 8\/16\(月\)  2日分発注\n/);
 });
 
 test("翌日だけ発注なしなら「明日は発注ありません」", () => {
@@ -72,4 +73,29 @@ test("リトライキーは同じ内容なら同じ・UUID形式", () => {
   assert.equal(a, b);
   assert.notEqual(a, c);
   assert.match(a, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-a[0-9a-f]{3}-[0-9a-f]{12}$/);
+});
+
+test("前日15時の予告は🟧・★の日だけ", () => {
+  assert.equal(buildMessage(cal, "2027-08-26", "eve"), null);  // 通常の🟦
+  assert.equal(buildMessage(cal, "2027-08-23", "eve"), null);  // 通常の🟩
+  assert.ok(buildMessage(cal, "2027-08-12", "eve"));           // 🟧★
+  assert.ok(buildMessage(cal, "2026-12-26", "eve"));           // ★（普段は発注なし）
+});
+
+test("普段は発注なしの日：※いつもは発注なし＋理由", () => {
+  assert.match(buildMessage(cal, "2026-12-26", "day"),
+    /本日 12\/26\(土\) は 🟦★1日分 の発注\n※いつもは発注なしの日です（12\/27\(日\) 臨時開市のため）\n/);
+  assert.match(buildMessage(cal, "2026-12-28", "day"), /※いつもは2日分です（12\/31\(木\)など4日 休市のため）/);
+});
+
+test("前日＋当日の配信は多い月で24回", () => {
+  const per = {};
+  const bump = m => (per[m] = (per[m] || 0) + 1);
+  for (let d = new Date(2026, 11, 1); d < new Date(2027, 11, 1); d.setDate(d.getDate() + 1)) {
+    const s = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    if (buildMessage(cal, s, "day")) bump(s.slice(0, 7));
+    const p = new Date(d); p.setDate(p.getDate() - 1);
+    if (buildMessage(cal, s, "eve")) bump(`${p.getFullYear()}-${String(p.getMonth() + 1).padStart(2, "0")}`);
+  }
+  assert.equal(Math.max(...Object.values(per)), 24, JSON.stringify(per));
 });

@@ -1,16 +1,18 @@
 #!/usr/bin/env node
 // 発注日の当日に、LINE公式アカウントから発注のお知らせを配信する。
 //
-//   node scripts/notify.mjs                    # 今日（JST）が発注日なら送信する
+//   node scripts/notify.mjs --when day         # 当日7時：今日（JST）が発注日なら送信
+//   node scripts/notify.mjs --when eve         # 前日15時：明日が🟧・★の発注日なら送信
 //   node scripts/notify.mjs --dry-run          # 送らずに本文だけ表示
 //   node scripts/notify.mjs --date 2027-08-12  # 対象日（発注日）を指定
-//   node scripts/notify.mjs --when eve         # （参考）前日向けの文面「明日 … の発注」
 //
 // 環境変数
 //   LINE_CHANNEL_ACCESS_TOKEN  Messaging API のチャネルアクセストークン（必須）
 //   LINE_GROUP_ID              設定するとそのグループにだけ送る（push）。未設定なら友だち全員（broadcast）
 //
-// 通知する日：発注できるすべての日（🟦1日分・🟩2日分・🟧3日分以上、★は通常の週と違う日）
+// 通知する日
+//   当日7時：発注できるすべての日（🟦1日分・🟩2日分・🟧3日分以上）
+//   前日15時：🟧3日分以上、または★通常の週（日・水休み）と違う発注日だけ（予告）
 // 発注できない日は通知せず、前の通知に「発注ありません」「次回の発注」として書く。
 import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
@@ -24,21 +26,44 @@ const WD = "日月火水木金土";
 const md = s => { const d = parse(s); return `${d.getMonth() + 1}/${d.getDate()}(${WD[d.getDay()]})`; };
 const mark = n => (n >= 3 ? "🟧" : n === 2 ? "🟩" : "🟦");
 
-export function shouldNotify(r) {
-  return r.status === "ok" || r.status === "okOpenEnd";
+// when="day"（当日7時）：発注できるすべての日
+// when="eve"（前日15時）：🟧3日分以上か、★通常の週と違う発注日だけ
+export function shouldNotify(r, when = "day") {
+  if (!(r.status === "ok" || r.status === "okOpenEnd")) return false;
+  return when === "day" ? true : r.n >= 3 || r.irregular;
+}
+
+// ★の日の「※いつもは〜」の1行
+function usualLine(cal, r) {
+  const u = r.usual;
+  const groups = { closed: [], open: [], xopen: [] };
+  for (let t = add(r.date, 1); t <= add(r.until, 1); t = add(t, 1)) {
+    const k = cal.dayIrregular(t);
+    if (k === "closed") groups.closed.push(t);
+    else if (k === "open") (/臨時開市/.test(cal.note(t)) ? groups.xopen : groups.open).push(t);
+  }
+  const fmt = (days, label) => {
+    if (!days.length) return null;
+    const list = days.length <= 2 ? days.map(md).join("・") : `${md(days[0])}など${days.length}日`;
+    return `${list} ${label}`;
+  };
+  const why = [fmt(groups.closed, "休市"), fmt(groups.xopen, "臨時開市"), fmt(groups.open, "開市")].filter(Boolean).join("、");
+  const usual = u.status === "ng" ? "いつもは発注なしの日です" : `いつもは${u.n}日分です`;
+  return `※${usual}${why ? `（${why}のため）` : ""}`;
 }
 
 // 発注日 date の通知本文。通知しない日は null
 //   when: "eve"=前日に送る（明日の発注） / "day"=当日に送る（本日の発注）
-export function buildMessage(cal, date, when = "eve") {
+export function buildMessage(cal, date, when = "day") {
   const r = cal.info(date);
-  if (!shouldNotify(r)) return null;
+  if (!shouldNotify(r, when)) return null;
   const open = r.status === "okOpenEnd";
   const head = when === "day" ? "本日" : "明日";
   const lines = [
     "【青果 発注のお知らせ】",
     `${head} ${md(date)} は ${mark(r.n)}${r.irregular ? "★" : ""}${r.n}日分${open ? "以上" : ""} の発注`,
   ];
+  if (r.irregular) lines.push(usualLine(cal, r));
   // 次の発注日までの「発注なし」の日
   const next = r.until; // 次の納品日の前日＝次の発注日
   if (!open) {
@@ -108,7 +133,8 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   const cal = makeCalendar(data, DEFAULT_RULES);
   const text = buildMessage(cal, date, when);
   if (!text) {
-    console.log(`${date}：通知対象ではありません（${cal.info(date).status}${cal.info(date).n ? " " + cal.info(date).n + "日分" : ""}）`);
+    const r0 = cal.info(date);
+    console.log(`${date}（${when === "day" ? "当日" : "前日"}の配信）：通知対象ではありません（${r0.status}${r0.n ? " " + r0.n + "日分" : ""}${r0.irregular ? " ★" : ""}）`);
     process.exit(0);
   }
   console.log(`${date}（${when === "day" ? "当日" : "前日"}の配信）：通知します\n----\n${text}\n----`);

@@ -55,19 +55,40 @@ site/ を GitHub Pages に配置（index.html が calendar.json と order.js で
 
 ## LINE通知
 
-`.github/workflows/notify.yml` が毎日 **10:07（JST）** に動き、**今日が発注日なら** LINE公式アカウントから配信する。発注できる日はすべて対象（月18〜21回）。発注できない日は配信せず、前の通知に「発注ありません」「次回の発注」として書く。
+`.github/workflows/notify.yml` が LINE公式アカウントから配信する。
 
+| 時刻（JST） | 対象 | 内容 |
+|---|---|---|
+| 当日 7:07 | 今日が発注日（すべて） | 本日の発注 |
+| 前日 15:07 | 明日が 🟧3日分以上 または ★通常の週と違う発注日 | 明日の発注の予告 |
+
+- ★の日は「※いつもは〇日分です／いつもは発注なしの日です（理由）」を1行入れる。
+- 発注できない日は配信せず、前の通知に「発注ありません」「次回の発注」として書く。
 - 宛先：Secrets に `LINE_GROUP_ID` があればそのグループにだけ送る（push）。なければ友だち全員（broadcast）。
-- 無料プラン（月200通）は「配信回数×届く人数」で数える。月21回なので、**9人まで**なら無料枠内。
+- 無料プラン（月200通）は「配信回数×届く人数」で数える。配信は月20〜24回なので、**8人まで**なら無料枠内。
 
+当日 7時（普段は発注なしの日）
 ```
 【青果 発注のお知らせ】
-本日 8/12(木) は 🟧★4日分 の発注
-明日から 8/15(日) まで発注ありません
+本日 12/26(土) は 🟦★1日分 の発注
+※いつもは発注なしの日です（12/27(日) 臨時開市のため）
+
+次回の発注は 12/27(日)  1日分発注
+https://watanabe-masao.github.io/seika-order-calendar/
+```
+
+前日 15時（予告）
+```
+【青果 発注のお知らせ】
+明日 8/12(木) は 🟧★4日分 の発注
+※いつもは1日分です（8/14(土)・8/16(月) 休市のため）
+8/13(金)〜8/15(日) は発注ありません
 
 次回の発注は 8/16(月)  2日分発注
 https://watanabe-masao.github.io/seika-order-calendar/
 ```
+
+当日 7時（通常の日）
 ```
 【青果 発注のお知らせ】
 本日 8/26(木) は 🟦1日分 の発注
@@ -82,7 +103,7 @@ https://watanabe-masao.github.io/seika-order-calendar/
 2. アカウントの「設定 → Messaging API」で Messaging API を有効にする（プロバイダーを作成）
 3. [LINE Developers](https://developers.line.biz/console/) で、そのチャネルの「Messaging API設定 → チャネルアクセストークン（長期）」を発行
 4. GitHub の Settings → Secrets and variables → Actions に `LINE_CHANNEL_ACCESS_TOKEN` として登録
-5. Actions →「LINE通知」→ Run workflow（`date` に `2027-08-12`、`dry_run` オン）で本文を確認 → `dry_run` オフで実際に届くか確認
+5. Actions →「LINE通知」→ Run workflow（`when` を選び、`date` に `2027-08-12`、`dry_run` オン）で本文を確認 → `dry_run` オフで実際に届くか確認
 7. （グループだけに送る場合）Messaging API設定で「グループトーク・複数人トークへの参加を許可する」をオン → 公式アカウントをグループに招待 → Webhook でグループID（groupId）を調べ、Secrets に `LINE_GROUP_ID` として登録
 6. 公式アカウントの友だち追加用QRコード・URLを配る
 
@@ -97,7 +118,7 @@ python3 -m unittest discover -s tests -v
 node --test tests/*.test.mjs
 python3 scripts/build.py --offline   # data/raw/*.ics から作り直す
 node scripts/feeds.mjs               # site/cal/seika.ics を作成
-node scripts/notify.mjs --date 2027-08-12 --dry-run   # 通知本文を確認
+node scripts/notify.mjs --date 2027-08-12 --when eve --dry-run   # 通知本文を確認（day=当日 / eve=前日）
 python3 -m http.server -d site 8000  # http://localhost:8000
 ```
 

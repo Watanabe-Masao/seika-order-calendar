@@ -2,18 +2,18 @@ name: LINE通知
 
 on:
   schedule:
-    # cron はUTC。対象の発注日について「前日」と「当日」の2回配信する
-    - cron: "7 6 * * *"   # 前日の配信 15:07 JST（明日が対象）
-    - cron: "7 22 * * *"  # 当日の配信  7:07 JST（今日が対象）
+    # cron はUTC
+    - cron: "7 6 * * *"   # 前日の予告 15:07 JST：明日が🟧・★の発注日なら配信
+    - cron: "7 22 * * *"  # 当日の通知  7:07 JST：今日が発注日なら配信
   workflow_dispatch:
     inputs:
       when:
-        description: "eve=前日の配信（明日が対象） / day=当日の配信（今日が対象）"
+        description: "day=当日の通知（今日が対象） / eve=前日の予告（明日が対象）"
         type: choice
-        options: [eve, day]
-        default: eve
+        options: [day, eve]
+        default: day
       date:
-        description: "対象の発注日（YYYY-MM-DD）。空なら when に応じて明日／今日"
+        description: "対象の発注日（YYYY-MM-DD）。空なら when に応じて今日／明日"
         required: false
         default: ""
       dry_run:
@@ -36,13 +36,17 @@ jobs:
       - name: 通知
         env:
           LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+          LINE_GROUP_ID: ${{ secrets.LINE_GROUP_ID }}
           SCHEDULE: ${{ github.event.schedule }}
           WHEN: ${{ inputs.when }}
           DATE: ${{ inputs.date }}
           DRY_RUN: ${{ inputs.dry_run }}
         run: |
-          if [ "$SCHEDULE" = "7 22 * * *" ]; then WHEN=day; fi
-          if [ -z "$WHEN" ]; then WHEN=eve; fi
+          case "$SCHEDULE" in
+            "7 6 * * *")  WHEN=eve ;;
+            "7 22 * * *") WHEN=day ;;
+          esac
+          if [ -z "$WHEN" ]; then WHEN=day; fi
           args=(--when "$WHEN")
           if [ -n "$DATE" ]; then args+=(--date "$DATE"); fi
           if [ "$DRY_RUN" = "true" ]; then args+=(--dry-run); fi
