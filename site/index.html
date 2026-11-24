@@ -15,6 +15,7 @@
   <div class="tabs">
     <button id="tabCal" class="on">カレンダー</button>
     <button id="tabList">発注日一覧</button>
+    <button id="tabSub">取り込み</button>
     <button id="tabSet">設定</button>
   </div>
 
@@ -28,10 +29,12 @@
     </div>
     <div class="grid" id="grid"></div>
     <div class="legend">
-      <span><i class="t-ok"></i>発注可（n日分）</span>
-      <span><i class="t-big"></i>まとめ発注（3日分以上）</span>
-      <span><i class="t-ng"></i>発注不可</span>
-      <span><i class="t-closed"></i>市場休</span>
+      <span><i class="t-one"></i>1日分</span>
+      <span><i class="t-ok"></i>2日分</span>
+      <span><i class="t-big"></i>3日分以上</span>
+      <span id="lgNg"><i class="t-ng"></i>発注不可</span>
+      <span><i class="t-closed"></i>休市日</span>
+      <span>★ 通常（日・水休み）と違う日</span>
     </div>
     <div class="detail" id="detail"></div>
   </section>
@@ -48,8 +51,25 @@
     <div class="list" id="list"></div>
   </section>
 
+  <section id="viewSub" hidden>
+    <div class="detail">
+      <h2>スマホのカレンダーに取り込む</h2>
+      <p class="note">発注日と休市日を1つのカレンダーとして登録します。休市日データが更新されると自動で反映されます（反映まで数時間〜1日程度）。</p>
+      <div class="marks">
+        <span>🟦 発注 1日分</span><span>🟩 発注 2日分</span><span>🟧 発注 3日分以上（例：🟧発注 7日分）</span><span>⬜ 休市日・開市日</span>
+      </div>
+      <p class="note">購読したカレンダーは多くのアプリでカレンダー全体が1色になるため、予定名の先頭の印で見分けます。</p>
+      <div id="feeds"></div>
+      <p class="note"><b>iPhone</b>：「iPhone」を押すと照会カレンダーの登録画面が開きます。<br>
+      <b>Googleカレンダー</b>：スマホアプリからはURLで追加できないため、パソコンのブラウザで「Google」を押すか、Googleカレンダーの「他のカレンダー → URLで追加」にURLを貼り付けてください。追加後はスマホのアプリにも表示されます。</p>
+      <p class="note">★：通常の週（日曜・水曜が休市）と違う日。発注日の場合は、通常なら何日分かと、その原因になった日を予定の説明欄に記載しています。</p>
+    </div>
+  </section>
+
   <section id="viewSet" hidden>
     <div class="detail">
+      <label class="opt"><input type="checkbox" id="optShowNg">
+        発注できない日に「発注×」を表示する</label>
       <label class="opt"><input type="checkbox" id="optClosedDay">
         市場が休みの日でも、翌日が開市なら発注できる</label>
       <label class="opt"><input type="checkbox" id="optReopen">
@@ -62,7 +82,8 @@
     <b>計算ルール</b><br>
     ・発注した翌日に市場から納品される前提です。翌日が休市の日は発注できません。<br>
     ・発注日の量は「納品日から、次の納品日の前日まで」の日数分です。<br>
-    ・休市日カレンダーに入っている日は、予定名に関係なく休市として扱います（「青果のみ休市」「青果卸のみ休業」を含む）。<br>
+    ・★は、通常の週（日曜・水曜が休市）と違う日です。休市日・開市日のほか、通常と発注日数が違う発注日にも付きます。<br>
+    ・元カレンダーの休市日に入っている日は、予定名に関係なく休市として扱います（「青果のみ休市」「青果卸のみ休業」を含む）。<br>
     ・出典：<a id="srcLink" href="https://kochi-seika.jp/">高知青果市場</a>の公開カレンダー（高知市中央卸売市場の市場カレンダーに基づくもの）を毎週自動取得しています。年末年始など重要な日は、市の市場カレンダーでもご確認ください。
   </div>
 </div>
@@ -75,6 +96,9 @@ const md = s => { const d = parse(s); return (d.getMonth() + 1) + "/" + d.getDat
 const ymLabel = s => { const d = parse(s); return d.getFullYear() + "年" + (d.getMonth() + 1) + "月"; };
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const $ = id => document.getElementById(id);
+const nClass = n => (n >= 3 ? "t-big" : n === 2 ? "t-ok" : "t-one");
+const nInk = n => (n >= 3 ? "var(--bigInk)" : n === 2 ? "var(--okInk)" : "var(--oneInk)");
+const usualText = u => (u.status === "ng" ? "発注不可" : u.n + "日分");
 
 const REOPEN = "^(セリはありません|卸のみ休業)";
 function loadRules() {
@@ -90,7 +114,19 @@ function saveRules(r) {
   try { localStorage.setItem("orderRules", JSON.stringify({ orderOnClosedDay: r.orderOnClosedDay, reopen: !!r.reopenPattern })); } catch (e) {}
 }
 
-let data, cal, rules = loadRules();
+function loadDisplay() {
+  const d = { showNg: true };
+  try {
+    const s = JSON.parse(localStorage.getItem("orderDisplay") || "{}");
+    if (typeof s.showNg === "boolean") d.showNg = s.showNg;
+  } catch (e) {}
+  return d;
+}
+function saveDisplay(d) {
+  try { localStorage.setItem("orderDisplay", JSON.stringify(d)); } catch (e) {}
+}
+
+let data, cal, rules = loadRules(), display = loadDisplay();
 const today = iso(new Date());
 let cur, sel;
 
@@ -107,11 +143,12 @@ function render() {
     const s = iso(new Date(y, m, dd)), w = new Date(y, m, dd).getDay();
     const r = cal.info(s);
     let tags = "";
-    if (r.open === false) tags += `<div class="tag t-closed">市場休</div>`;
-    if (r.status === "ng") tags += `<div class="tag t-ng">発注×</div>`;
+    if (r.open === false) tags += `<div class="tag t-closed">${r.dayIrregular ? "★" : ""}休市日</div>`;
+    else if (r.dayIrregular === "open") tags += `<div class="tag t-xopen">★開市日</div>`;
+    if (r.status === "ng") { if (display.showNg) tags += `<div class="tag t-ng">発注×</div>`; }
     else if (r.status === "ok" || r.status === "okOpenEnd") {
       const lbl = r.status === "okOpenEnd" ? r.n + "日〜" : r.n + "日分";
-      tags += `<div class="tag ${r.n >= 3 ? "t-big" : "t-ok"}">発注 ${lbl}</div>`;
+      tags += `<div class="tag ${nClass(r.n)}">${r.irregular ? "★" : ""}発注 ${lbl}</div>`;
     } else tags += `<div class="tag t-unk">未確定</div>`;
     const hol = r.open === false && w !== 0 && w !== 3;
     const cls = ["cell", w == 0 ? "sun" : w == 6 ? "sat" : "", hol ? "hol" : "", s === today ? "today" : "", s === sel ? "sel" : ""].join(" ");
@@ -128,8 +165,9 @@ function renderDetail() {
   const r = cal.info(sel);
   let h = `<h2>${parse(sel).getFullYear()}年 ${md(sel)}</h2>`;
   h += `<p class="note">市場：${r.open === null ? "データなし" : r.open ? "開市" : "休市"}${r.note ? "（" + esc(r.note) + "）" : ""}</p>`;
+  if (r.dayIrregular) h += `<p class="note">★${r.dayIrregular === "closed" ? "日曜・水曜以外の休市日" : "日曜・水曜の開市日"}</p>`;
   if (r.status === "ng") {
-    h += `<p class="big" style="color:var(--ngInk)">発注できません</p>`;
+    h += `<p class="big" style="color:var(--ngInk)">${r.irregular ? "★" : ""}発注できません</p>`;
     h += `<p>${r.reason === "nextClosed" ? md(r.blockedBy) + " が休市のため。" : "市場が休みの日のため（設定による）。"}</p>`;
     for (let t = sel, i = 0; i < 14; i++) {
       t = add(t, -1);
@@ -139,11 +177,12 @@ function renderDetail() {
       }
     }
   } else if (r.status === "ok" || r.status === "okOpenEnd") {
-    h += `<p class="big" style="color:${r.n >= 3 ? "var(--bigInk)" : "var(--okInk)"}">${r.n}日分${r.status === "okOpenEnd" ? "以上" : ""}を発注</p>`;
+    h += `<p class="big" style="color:${nInk(r.n)}">${r.irregular ? "★" : ""}${r.n}日分${r.status === "okOpenEnd" ? "以上" : ""}を発注</p>`;
     h += `<p>納品 ${md(r.delivery)} → ${md(r.delivery)}〜${md(r.until)} の分</p>`;
     if (r.status === "ok") h += `<p class="note">次の納品日：${md(add(r.until, 1))}</p>`;
     else h += `<p class="note">翌年の休市日がまだ公開されていないため、日数が確定していません。</p>`;
   } else h += `<p class="note">データ範囲外です。</p>`;
+  if (r.irregular) h += `<p class="note">★通常の週（日・水休み）なら ${usualText(r.usual)}</p>`;
   el.innerHTML = h;
 }
 
@@ -156,24 +195,47 @@ function renderList() {
     if (!(r.status === "ok" || r.status === "okOpenEnd") || r.n < minN) continue;
     const mk = ymLabel(s);
     if (mk !== lastM) { h += `<div class="month-h">${mk}</div>`; lastM = mk; }
-    h += `<div class="row ${s < today ? "past" : ""}"><div class="od">${md(s)}</div><div class="cv">納品 ${md(r.delivery)}〜${md(r.until)}</div><div class="n ${r.n >= 3 ? "t-big" : "t-ok"}">${r.n}日分${r.status === "okOpenEnd" ? "〜" : ""}</div></div>`;
+    h += `<div class="row ${s < today ? "past" : ""}"><div class="od">${md(s)}</div><div class="cv">納品 ${md(r.delivery)}〜${md(r.until)}</div><div class="n ${nClass(r.n)}">${r.irregular ? "★" : ""}${r.n}日分${r.status === "okOpenEnd" ? "〜" : ""}</div></div>`;
   }
   $("list").innerHTML = h || '<p class="note">該当する発注日はありません。</p>';
 }
 
 function rebuild() { cal = makeCalendar(data, rules); render(); if (!$("viewList").hidden) renderList(); }
 
-const views = { tabCal: "viewCal", tabList: "viewList", tabSet: "viewSet" };
+const FEEDS = [
+  { file: "seika.ics", name: "青果 発注カレンダー" },
+];
+function renderFeeds() {
+  let h = "";
+  for (const f of FEEDS) {
+    const url = new URL("cal/" + f.file, location.href).href;
+    const webcal = url.replace(/^https?:/, "webcal:");
+    const google = "https://calendar.google.com/calendar/render?cid=" + encodeURIComponent(webcal);
+    h += `<div class="feed"><div class="fname">${f.name}</div>
+      <div class="fbtn"><a href="${webcal}">iPhone</a><a href="${google}" target="_blank" rel="noopener">Google</a><button data-url="${url}">URLをコピー</button></div>
+      <div class="furl">${url}</div></div>`;
+  }
+  $("feeds").innerHTML = h;
+  $("feeds").querySelectorAll("button[data-url]").forEach(b => b.onclick = async () => {
+    try { await navigator.clipboard.writeText(b.dataset.url); b.textContent = "コピーしました"; }
+    catch (e) { b.textContent = "下のURLを長押しでコピー"; }
+    setTimeout(() => (b.textContent = "URLをコピー"), 2500);
+  });
+}
+
+const views = { tabCal: "viewCal", tabList: "viewList", tabSub: "viewSub", tabSet: "viewSet" };
 for (const [tab, view] of Object.entries(views)) {
   $(tab).onclick = () => {
     for (const [t, v] of Object.entries(views)) { $(t).classList.toggle("on", t === tab); $(v).hidden = v !== view; }
     if (view === "viewList") renderList();
+    if (view === "viewSub") renderFeeds();
   };
 }
 $("prev").onclick = () => { cur = new Date(cur.getFullYear(), cur.getMonth() - 1, 1); render(); };
 $("next").onclick = () => { cur = new Date(cur.getFullYear(), cur.getMonth() + 1, 1); render(); };
 $("minN").onchange = renderList;
 $("showPast").onchange = renderList;
+$("optShowNg").onchange = e => { display.showNg = e.target.checked; saveDisplay(display); $("lgNg").hidden = !display.showNg; render(); };
 $("optClosedDay").onchange = e => { rules.orderOnClosedDay = e.target.checked; saveRules(rules); rebuild(); };
 $("optReopen").onchange = e => { rules.reopenPattern = e.target.checked ? REOPEN : null; saveRules(rules); rebuild(); };
 
@@ -186,6 +248,8 @@ try {
   $("err").hidden = false;
   throw e;
 }
+$("optShowNg").checked = display.showNg;
+$("lgNg").hidden = !display.showNg;
 $("optClosedDay").checked = rules.orderOnClosedDay;
 $("optReopen").checked = !!rules.reopenPattern;
 if (data.updated_at) $("updated").textContent = "（休市日データ：" + data.last.slice(0, 4) + "年末まで／" + data.updated_at.slice(0, 10) + " 更新）";

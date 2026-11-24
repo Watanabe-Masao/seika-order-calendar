@@ -1,21 +1,9 @@
 // node --test tests/  で実行
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
 import { makeCalendar, DEFAULT_RULES } from "../site/order.js";
 
-// フィクスチャのicsから calendar.json 相当を作る
-function load() {
-  const py = `
-import json,sys
-sys.path.insert(0,'scripts')
-import build
-c=build.parse_ics(open('tests/fixtures/closed.ics',encoding='utf-8').read())
-o=build.parse_ics(open('tests/fixtures/open.ics',encoding='utf-8').read())
-print(json.dumps({'first':min(c),'last':max(c),'closed':c,'open':o},ensure_ascii=False))`;
-  return JSON.parse(execFileSync("python3", ["-c", py], { encoding: "utf-8" }));
-}
-const data = load();
+import { fixtureData as data } from "./fixture-data.mjs";
 
 test("2027年お盆：12日に4日分、13〜15・17日は発注不可", () => {
   const cal = makeCalendar(data);
