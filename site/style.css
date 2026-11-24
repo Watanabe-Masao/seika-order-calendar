@@ -62,3 +62,4 @@ h1{font-size:18px;margin:4px 0 2px}
 .opt{display:flex;gap:8px;align-items:flex-start;margin:6px 0 10px;font-size:14px}
 .opt input{margin-top:4px}
 .rule a{color:var(--accent)}
+[hidden]{display:none !important}
