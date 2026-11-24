@@ -2,6 +2,7 @@
   --bg:#f7f6f3; --card:#fff; --ink:#1f2328; --sub:#6b6f76; --line:#e4e2dc;
   --closed:#d9d7d1; --closedInk:#7a7770;
   --ng:#fbe3e1; --ngInk:#b3261e;
+  --one:#e3edfb; --oneInk:#1f4f8f;
   --ok:#e6f2ea; --okInk:#1d6b3a;
   --big:#ffe2b8; --bigInk:#8a4b00;
   --accent:#2f5d8a;
@@ -9,7 +10,7 @@
 @media (prefers-color-scheme: dark){
   :root{ --bg:#17181a; --card:#212226; --ink:#ececec; --sub:#9a9ca3; --line:#33353a;
     --closed:#3a3a3d; --closedInk:#a3a19b; --ng:#4a2422; --ngInk:#ff9a90;
-    --ok:#1f3a2a; --okInk:#8fd6a7; --big:#4d3510; --bigInk:#ffc46e; --accent:#7fb0e0; }
+    --one:#1d2e47; --oneInk:#9cc3f5; --ok:#1f3a2a; --okInk:#8fd6a7; --big:#4d3510; --bigInk:#ffc46e; --accent:#7fb0e0; }
 }
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif;font-size:15px;line-height:1.5}
@@ -63,3 +64,12 @@ h1{font-size:18px;margin:4px 0 2px}
 .opt input{margin-top:4px}
 .rule a{color:var(--accent)}
 [hidden]{display:none !important}
+.t-one{background:var(--one);color:var(--oneInk)}
+.t-xopen{background:transparent;color:var(--accent);border:1px solid var(--accent)}
+.tabs button{padding:8px 4px;font-size:13.5px}
+.feed{border-top:1px solid var(--line);padding:10px 0}
+.fname{font-weight:700;display:flex;align-items:center;gap:6px}
+.fname i{display:inline-block;width:14px;height:14px;border-radius:4px}
+.fbtn{display:flex;gap:6px;margin:6px 0}
+.fbtn a,.fbtn button{flex:1;text-align:center;padding:7px 4px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink);font-size:13px;text-decoration:none}
+.furl{font-size:11px;color:var(--sub);word-break:break-all;user-select:all}
