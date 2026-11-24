@@ -69,3 +69,13 @@ test("イレギュラー判定：通常の週と結果が違う日だけ", () =>
   assert.equal(cal.dayIrregular("2027-08-16"), "closed");
   assert.equal(cal.dayIrregular("2026-12-27"), "open");
 });
+
+test("全予定の説明欄に公式カレンダーへのリンク", () => {
+  const all = events(body);
+  for (const e of all) {
+    assert.match(e, /https:\/\/www\.city\.kochi\.kochi\.jp\/soshiki\/106\/h25cal\.html/);
+    assert.match(e, /https:\/\/kochi-seika\.jp\//);
+    assert.match(e, /URL:https:\/\/www\.city\.kochi/);
+  }
+  assert.match(on("20270812")[0], /通常の週[\s\S]*\\n\\n――/); // 本文のあとに区切りとリンク
+});

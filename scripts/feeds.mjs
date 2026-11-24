@@ -18,6 +18,14 @@ import { makeCalendar, DEFAULT_RULES, iso, parse, add } from "../site/order.js";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const UID_DOMAIN = "seika-order-calendar.watanabe-masao.github.io";
+
+// 公開されている元のカレンダー（全予定の説明欄の末尾にリンクを付ける）
+export const OFFICIAL_LINKS = [
+  { label: "高知市 市場カレンダー（PDF）", url: "https://www.city.kochi.kochi.jp/soshiki/106/h25cal.html" },
+  { label: "高知青果市場 営業日カレンダー", url: "https://kochi-seika.jp/" },
+];
+const LINKS_TEXT = "――\n" + OFFICIAL_LINKS.map(l => `${l.label}\n${l.url}`).join("\n");
+const withLinks = text => (text ? text + "\n\n" : "") + LINKS_TEXT;
 const WD = "日月火水木金土";
 
 export const FEED = { file: "seika.ics", name: "青果 発注カレンダー" };
@@ -72,7 +80,8 @@ function vcalendar(name, events, stamp) {
       `DTSTART;VALUE=DATE:${ymd(e.date)}`,
       `DTEND;VALUE=DATE:${ymd(add(e.date, 1))}`,
       `SUMMARY:${escapeText(e.summary)}`,
-      ...(e.description ? [`DESCRIPTION:${escapeText(e.description)}`] : []),
+      `DESCRIPTION:${escapeText(withLinks(e.description))}`,
+      `URL:${OFFICIAL_LINKS[0].url}`,
       ...(e.color ? [`COLOR:${e.color}`] : []),
       "TRANSP:TRANSPARENT",
       "END:VEVENT",
