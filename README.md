@@ -53,6 +53,39 @@ site/ を GitHub Pages に配置（index.html が calendar.json と order.js で
 - 予定のIDは種類と日付で固定しているため、データが更新されても二重登録にならない。
 - 既定のルール（休市日でも翌日が開市なら発注可、12/31は休み扱い）で作成。ページの「設定」は購読カレンダーには反映されない。
 
+## LINE通知
+
+`.github/workflows/notify.yml` が毎日 17:07（JST）に動き、**翌日が次のどちらかの発注日なら** LINE公式アカウントから友だち全員に配信する（ブロードキャスト）。
+
+- 🟧 3日分以上のまとめ発注
+- ★ 通常の週（日・水休み）と日数が違う発注日
+
+発注できない日は個別に通知せず、前の通知に「次の発注日」として書く。2027年の配信は月0〜5回。
+
+```
+【青果 発注のお知らせ】
+明日 8/12(木) は 🟧★4日分 の発注です
+・納品：8/13(金)
+・対象：8/13(金)〜8/16(月)
+・次の発注日：8/16(月)
+・通常の週なら 1日分（8/14(土) 休市、8/16(月) 休市）
+
+https://watanabe-masao.github.io/seika-order-calendar/
+```
+
+### 設定手順
+
+1. [LINE Official Account Manager](https://manager.line.biz/) で公式アカウントを作成（無料のコミュニケーションプラン：月200通まで。友だち1人に1通で数える）
+2. アカウントの「設定 → Messaging API」で Messaging API を有効にする（プロバイダーを作成）
+3. [LINE Developers](https://developers.line.biz/console/) で、そのチャネルの「Messaging API設定 → チャネルアクセストークン（長期）」を発行
+4. GitHub の Settings → Secrets and variables → Actions に `LINE_CHANNEL_ACCESS_TOKEN` として登録
+5. Actions →「LINE通知」→ Run workflow（`date` に `2027-08-12`、`dry_run` オン）で本文を確認 → `dry_run` オフで実際に届くか確認
+6. 公式アカウントの友だち追加用QRコード・URLを配る
+
+- トークン未設定のときは送信せずに終わる（失敗にはしない）。
+- 同じ対象日・同じ本文は再実行しても二重送信しない（`X-Line-Retry-Key`）。
+- GitHub のスケジュール実行は混雑時に数十分遅れることがある。
+
 ## 手元での確認
 
 ```sh
@@ -60,6 +93,7 @@ python3 -m unittest discover -s tests -v
 node --test tests/*.test.mjs
 python3 scripts/build.py --offline   # data/raw/*.ics から作り直す
 node scripts/feeds.mjs               # site/cal/seika.ics を作成
+node scripts/notify.mjs --date 2027-08-12 --dry-run   # 通知本文を確認
 python3 -m http.server -d site 8000  # http://localhost:8000
 ```
 
