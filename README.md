@@ -44,7 +44,7 @@ site/ を GitHub Pages に配置（index.html が calendar.json と order.js で
 |---|---|---|
 | 🟦 発注 1日分 | 1日分の発注日 | royalblue |
 | 🟩 発注 2日分 | 2日分の発注日 | seagreen |
-| 🟧 発注 n日分 | 3日分以上の発注日 | darkorange |
+| 🟧 発注 n日分 | 3日分以上の発注日（nは実際の日数。例：🟧発注 4日分、🟧★発注 7日分） | darkorange |
 | ⬜ 休市日 / ⬜★開市日 | 休市日、日・水の臨時開市日 | gray |
 
 - 購読カレンダーは多くのアプリ（Google・iPhone）でカレンダー全体が1色になるため、予定名の先頭の印で見分ける。予定ごとの色（RFC 7986 COLOR）も入れてあり、対応アプリでは色も付く。
