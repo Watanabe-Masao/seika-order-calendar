@@ -19,7 +19,7 @@ site/ を GitHub Pages に配置（index.html が calendar.json と order.js で
 |---|---|
 | `scripts/build.py` | ics の取得・解析、異常検知（件数が前回の5割未満なら更新しない） |
 | `site/order.js` | 発注日の計算ロジック（ページ・購読カレンダー・テストで共用） |
-| `scripts/feeds.mjs` | 購読用カレンダー（ics）を作成 → `site/cal/`（デプロイ時に生成、コミットしない） |
+| `scripts/feeds.mjs` | 購読用カレンダー `site/cal/seika.ics` を作成（デプロイ時に生成、コミットしない） |
 | `site/index.html` | カレンダー表示（カレンダー／発注日一覧／設定） |
 | `site/data/calendar.json` | 生成データ（自動更新） |
 | `data/raw/*.ics` | 取得した元データ（差分確認用） |
@@ -38,18 +38,19 @@ site/ を GitHub Pages に配置（index.html が calendar.json と order.js で
 
 ## カレンダーの取り込み（購読）
 
-ページの「取り込み」タブから登録します。すべて終日の予定で、期間は1年前〜休市日データの最終日です。
+ページの「取り込み」タブから `cal/seika.ics`（1本）を登録します。すべて終日の予定で、期間は1年前〜休市日データの最終日です。
 
-| URL | 内容 |
-|---|---|
-| `cal/order-1.ics` | 発注（1日分） |
-| `cal/order-2.ics` | 発注（2日分） |
-| `cal/order-3plus.ics` | 発注（3日分以上） |
-| `cal/closed.ics` | 休市日（日・水以外の休市日は★休市日、日・水の開市日は★開市日） |
+| 予定名の印 | 内容 | COLOR |
+|---|---|---|
+| 🟦 発注 1日分 | 1日分の発注日 | royalblue |
+| 🟩 発注 2日分 | 2日分の発注日 | seagreen |
+| 🟧 発注 n日分 | 3日分以上の発注日 | darkorange |
+| ⬜ 休市日 / ⬜★開市日 | 休市日、日・水の臨時開市日 | gray |
 
+- 購読カレンダーは多くのアプリ（Google・iPhone）でカレンダー全体が1色になるため、予定名の先頭の印で見分ける。予定ごとの色（RFC 7986 COLOR）も入れてあり、対応アプリでは色も付く。
 - ★：通常の週（日曜・水曜が休市）と違う日。発注日は「通常の週なら何日分か」と、その原因になった日を説明欄に記載。
-- 予定のIDは日付で固定しているため、データが更新されても二重登録にならない。
-- 購読カレンダーは既定のルール（休市日でも翌日が開市なら発注可、12/31は休み扱い）で作成。ページの「設定」は購読カレンダーには反映されない。
+- 予定のIDは種類と日付で固定しているため、データが更新されても二重登録にならない。
+- 既定のルール（休市日でも翌日が開市なら発注可、12/31は休み扱い）で作成。ページの「設定」は購読カレンダーには反映されない。
 
 ## 手元での確認
 
@@ -57,7 +58,7 @@ site/ を GitHub Pages に配置（index.html が calendar.json と order.js で
 python3 -m unittest discover -s tests -v
 node --test tests/*.test.mjs
 python3 scripts/build.py --offline   # data/raw/*.ics から作り直す
-node scripts/feeds.mjs               # site/cal/*.ics を作成
+node scripts/feeds.mjs               # site/cal/seika.ics を作成
 python3 -m http.server -d site 8000  # http://localhost:8000
 ```
 

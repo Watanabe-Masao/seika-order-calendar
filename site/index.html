@@ -54,11 +54,15 @@
   <section id="viewSub" hidden>
     <div class="detail">
       <h2>スマホのカレンダーに取り込む</h2>
-      <p class="note">日数ごと・休市日を別々のカレンダーとして登録します。カレンダーアプリ側で色を変えられます。休市日データが更新されると自動で反映されます（反映まで数時間〜1日程度）。</p>
+      <p class="note">発注日と休市日を1つのカレンダーとして登録します。休市日データが更新されると自動で反映されます（反映まで数時間〜1日程度）。</p>
+      <div class="marks">
+        <span>🟦 発注 1日分</span><span>🟩 発注 2日分</span><span>🟧 発注 3日分以上</span><span>⬜ 休市日・開市日</span>
+      </div>
+      <p class="note">購読したカレンダーは多くのアプリでカレンダー全体が1色になるため、予定名の先頭の印で見分けます。</p>
       <div id="feeds"></div>
       <p class="note"><b>iPhone</b>：「iPhone」を押すと照会カレンダーの登録画面が開きます。<br>
       <b>Googleカレンダー</b>：スマホアプリからはURLで追加できないため、パソコンのブラウザで「Google」を押すか、Googleカレンダーの「他のカレンダー → URLで追加」にURLを貼り付けてください。追加後はスマホのアプリにも表示されます。</p>
-      <p class="note">★：通常の週（日曜・水曜が休市）と違う日。発注日の場合は、通常なら何日分かを予定の説明欄に記載しています。</p>
+      <p class="note">★：通常の週（日曜・水曜が休市）と違う日。発注日の場合は、通常なら何日分かと、その原因になった日を予定の説明欄に記載しています。</p>
     </div>
   </section>
 
@@ -199,10 +203,7 @@ function renderList() {
 function rebuild() { cal = makeCalendar(data, rules); render(); if (!$("viewList").hidden) renderList(); }
 
 const FEEDS = [
-  { file: "order-1.ics", name: "発注（1日分）", cls: "t-one" },
-  { file: "order-2.ics", name: "発注（2日分）", cls: "t-ok" },
-  { file: "order-3plus.ics", name: "発注（3日分以上）", cls: "t-big" },
-  { file: "closed.ics", name: "休市日", cls: "t-closed" },
+  { file: "seika.ics", name: "青果 発注カレンダー" },
 ];
 function renderFeeds() {
   let h = "";
@@ -210,7 +211,7 @@ function renderFeeds() {
     const url = new URL("cal/" + f.file, location.href).href;
     const webcal = url.replace(/^https?:/, "webcal:");
     const google = "https://calendar.google.com/calendar/render?cid=" + encodeURIComponent(webcal);
-    h += `<div class="feed"><div class="fname"><i class="${f.cls}"></i>${f.name}</div>
+    h += `<div class="feed"><div class="fname">${f.name}</div>
       <div class="fbtn"><a href="${webcal}">iPhone</a><a href="${google}" target="_blank" rel="noopener">Google</a><button data-url="${url}">URLをコピー</button></div>
       <div class="furl">${url}</div></div>`;
   }

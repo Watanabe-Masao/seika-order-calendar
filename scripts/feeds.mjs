@@ -3,11 +3,11 @@
 //
 //   node scripts/feeds.mjs [--today YYYY-MM-DD] [--out site/cal]
 //
-// 出力（すべて終日の予定）
-//   order-1.ics       発注（1日分）
-//   order-2.ics       発注（2日分）
-//   order-3plus.ics   発注（3日分以上）
-//   closed.ics        休市日（日・水以外の休市日と、日・水の開市日には★）
+// 出力：seika.ics（1本のカレンダー。すべて終日の予定）
+//   予定名の先頭の印で種類を見分ける（購読カレンダーは多くのアプリで全体1色になるため）
+//     🟦 発注 1日分 / 🟩 発注 2日分 / 🟧 発注 3日分以上 / ⬜ 休市日・開市日
+//   ★：通常の週（日曜・水曜が休市）と違う日
+//   予定ごとの色（RFC 7986 COLOR）も入れる。対応しているアプリでは色も付く。
 //
 // 期間：今日の1年前 〜 休市日データの最終日
 // 発注日の計算は site/order.js をそのまま使う（ページと同じ結果になる）。
@@ -20,12 +20,16 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const UID_DOMAIN = "seika-order-calendar.watanabe-masao.github.io";
 const WD = "日月火水木金土";
 
-export const FEEDS = [
-  { file: "order-1.ics", name: "青果 発注（1日分）", match: r => r.n === 1 },
-  { file: "order-2.ics", name: "青果 発注（2日分）", match: r => r.n === 2 },
-  { file: "order-3plus.ics", name: "青果 発注（3日分以上）", match: r => r.n >= 3 },
-];
-export const CLOSED_FEED = { file: "closed.ics", name: "青果 休市日" };
+export const FEED = { file: "seika.ics", name: "青果 発注カレンダー" };
+
+// 種類ごとの印と色（COLOR は CSS3 の色名）
+export const LAYERS = {
+  order1: { mark: "🟦", color: "royalblue" },
+  order2: { mark: "🟩", color: "seagreen" },
+  order3: { mark: "🟧", color: "darkorange" },
+  market: { mark: "⬜", color: "gray" },
+};
+const orderLayer = n => (n >= 3 ? LAYERS.order3 : n === 2 ? LAYERS.order2 : LAYERS.order1);
 
 const md = s => { const d = parse(s); return `${d.getMonth() + 1}/${d.getDate()}(${WD[d.getDay()]})`; };
 const ymd = s => s.replaceAll("-", "");
@@ -69,6 +73,7 @@ function vcalendar(name, events, stamp) {
       `DTEND;VALUE=DATE:${ymd(add(e.date, 1))}`,
       `SUMMARY:${escapeText(e.summary)}`,
       ...(e.description ? [`DESCRIPTION:${escapeText(e.description)}`] : []),
+      ...(e.color ? [`COLOR:${e.color}`] : []),
       "TRANSP:TRANSPARENT",
       "END:VEVENT",
     );
@@ -79,9 +84,9 @@ function vcalendar(name, events, stamp) {
 
 // ---- 予定の中身 ----
 function orderEvent(cal, r) {
-  const mark = r.irregular ? "★" : "";
+  const layer = orderLayer(r.n);
   const open = r.status === "okOpenEnd";
-  const summary = `${mark}発注 ${r.n}日分${open ? "〜（未確定）" : ""}`;
+  const summary = `${layer.mark}${r.irregular ? "★" : ""}発注 ${r.n}日分${open ? "〜（未確定）" : ""}`;
   const desc = [
     `納品：${md(r.delivery)}`,
     `対象：${md(r.delivery)}〜${md(r.until)} の${r.n}日分${open ? "以上" : ""}`,
@@ -99,7 +104,7 @@ function orderEvent(cal, r) {
     desc.push(`★通常の週（日・水休み）なら ${usual}`);
     if (days.length) desc.push("いつもと違う日：" + days.join("、"));
   }
-  return { uid: `order-${ymd(r.date)}`, date: r.date, summary, description: desc.join("\n") };
+  return { uid: `order-${ymd(r.date)}`, date: r.date, summary, description: desc.join("\n"), color: layer.color };
 }
 
 function closedEvents(cal, from, to) {
@@ -111,13 +116,13 @@ function closedEvents(cal, from, to) {
     if (o === false) {
       out.push({
         uid: `closed-${ymd(s)}`, date: s,
-        summary: (k ? "★" : "") + "休市日",
+        summary: LAYERS.market.mark + (k ? "★" : "") + "休市日", color: LAYERS.market.color,
         description: [note, k ? "★日曜・水曜以外の休市日" : ""].filter(Boolean).join("\n"),
       });
     } else if (k === "open") {
       out.push({
         uid: `open-${ymd(s)}`, date: s,
-        summary: "★開市日",
+        summary: LAYERS.market.mark + "★開市日", color: LAYERS.market.color,
         description: [note, "★日曜・水曜の開市日"].filter(Boolean).join("\n"),
       });
     }
@@ -139,12 +144,10 @@ export function buildFeeds(data, today, rules = DEFAULT_RULES) {
     const r = cal.info(s);
     if (r.status === "ok" || r.status === "okOpenEnd") orders.push(r);
   }
-  const files = {};
-  for (const f of FEEDS) {
-    files[f.file] = vcalendar(f.name, orders.filter(f.match).map(r => orderEvent(cal, r)), stamp);
-  }
-  files[CLOSED_FEED.file] = vcalendar(CLOSED_FEED.name, closedEvents(cal, from, to), stamp);
-  return { files, from, to, count: orders.length };
+  // 日付順に、同じ日は休市日 → 発注の順で並べる
+  const events = [...closedEvents(cal, from, to), ...orders.map(r => orderEvent(cal, r))]
+    .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+  return { files: { [FEED.file]: vcalendar(FEED.name, events, stamp) }, from, to, count: orders.length };
 }
 
 // ---- コマンドとして実行されたとき ----

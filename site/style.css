@@ -73,3 +73,4 @@ h1{font-size:18px;margin:4px 0 2px}
 .fbtn{display:flex;gap:6px;margin:6px 0}
 .fbtn a,.fbtn button{flex:1;text-align:center;padding:7px 4px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink);font-size:13px;text-decoration:none}
 .furl{font-size:11px;color:var(--sub);word-break:break-all;user-select:all}
+.marks{display:grid;grid-template-columns:1fr 1fr;gap:4px 10px;font-size:13px;margin:8px 0}
