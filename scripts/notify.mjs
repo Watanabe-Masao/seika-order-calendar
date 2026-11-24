@@ -1,18 +1,17 @@
 #!/usr/bin/env node
-// LINE公式アカウントから、まとめ発注・いつもと違う発注日の前日にお知らせを一斉配信する。
+// 発注日の当日に、LINE公式アカウントから発注のお知らせを配信する。
 //
-//   node scripts/notify.mjs --when eve         # 前日の配信：明日（JST）の発注日が対象
-//   node scripts/notify.mjs --when day         # 当日の配信：今日（JST）の発注日が対象
+//   node scripts/notify.mjs                    # 今日（JST）が発注日なら送信する
 //   node scripts/notify.mjs --dry-run          # 送らずに本文だけ表示
 //   node scripts/notify.mjs --date 2027-08-12  # 対象日（発注日）を指定
+//   node scripts/notify.mjs --when eve         # （参考）前日向けの文面「明日 … の発注」
 //
-// 環境変数 LINE_CHANNEL_ACCESS_TOKEN（Messaging API のチャネルアクセストークン）
+// 環境変数
+//   LINE_CHANNEL_ACCESS_TOKEN  Messaging API のチャネルアクセストークン（必須）
+//   LINE_GROUP_ID              設定するとそのグループにだけ送る（push）。未設定なら友だち全員（broadcast）
 //
-// 通知する日：発注できる日のうち、次のどちらか
-//   - 3日分以上（🟧）
-//   - 通常の週（日・水休み）と日数が違う（★）
-// 同じ発注日について「前日」と「当日」の2回送る。
-// 発注できない日は個別に通知せず、通知の中に「発注ありません」「次回の発注」として書く。
+// 通知する日：発注できるすべての日（🟦1日分・🟩2日分・🟧3日分以上、★は通常の週と違う日）
+// 発注できない日は通知せず、前の通知に「発注ありません」「次回の発注」として書く。
 import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { dirname, join, resolve } from "node:path";
@@ -26,7 +25,7 @@ const md = s => { const d = parse(s); return `${d.getMonth() + 1}/${d.getDate()}
 const mark = n => (n >= 3 ? "🟧" : n === 2 ? "🟩" : "🟦");
 
 export function shouldNotify(r) {
-  return (r.status === "ok" || r.status === "okOpenEnd") && (r.n >= 3 || r.irregular);
+  return r.status === "ok" || r.status === "okOpenEnd";
 }
 
 // 発注日 date の通知本文。通知しない日は null
@@ -67,14 +66,17 @@ export function retryKey(date, text) {
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(13, 16)}-a${h.slice(17, 20)}-${h.slice(20, 32)}`;
 }
 
-async function broadcast(token, text, key) {
+// to があればその宛先（グループ）に push、なければ友だち全員に broadcast
+async function send(token, text, key, to) {
+  const url = to ? "https://api.line.me/v2/bot/message/push" : "https://api.line.me/v2/bot/message/broadcast";
+  const payload = to ? { to, messages: [{ type: "text", text }] } : { messages: [{ type: "text", text }] };
   for (let attempt = 1; attempt <= 3; attempt++) {
     let res;
     try {
-      res = await fetch("https://api.line.me/v2/bot/message/broadcast", {
+      res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, "X-Line-Retry-Key": key },
-        body: JSON.stringify({ messages: [{ type: "text", text }] }),
+        body: JSON.stringify(payload),
       });
     } catch (e) {
       console.error(`送信エラー（${attempt}回目）: ${e.message}`);
@@ -99,7 +101,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   const opt = k => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : undefined; };
   const dryRun = args.includes("--dry-run");
   const todayJst = new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Tokyo" }).format(new Date());
-  const when = opt("--when") === "day" ? "day" : "eve";
+  const when = opt("--when") === "eve" ? "eve" : "day";
   const date = opt("--date") || (when === "day" ? todayJst : add(todayJst, 1));
 
   const data = JSON.parse(readFileSync(join(ROOT, "site/data/calendar.json"), "utf-8"));
@@ -117,8 +119,9 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     process.exit(0);
   }
   try {
-    const r = await broadcast(token, text, retryKey(date, text));
-    console.log(r === "sent" ? "送信しました" : "同じ内容は送信済みです");
+    const to = process.env.LINE_GROUP_ID || "";
+    const r = await send(token, text, retryKey(date, text), to);
+    console.log(`${to ? "グループ" : "友だち全員"}へ${r === "sent" ? "送信しました" : "：同じ内容は送信済みです"}`);
   } catch (e) {
     console.error(`::error::${e.message}`);
     process.exit(1);
