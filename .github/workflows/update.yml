@@ -1,0 +1,75 @@
+name: 休市日データ更新
+
+on:
+  schedule:
+    # 毎週月曜 6:17 JST（cron はUTC。混雑を避けて分をずらしている）
+    - cron: "17 21 * * 0"
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ["site/**", "scripts/**", ".github/workflows/update.yml"]
+
+permissions:
+  contents: write
+  issues: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: update
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    outputs:
+      changed: ${{ steps.build.outputs.changed }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: テスト
+        run: |
+          python3 -m unittest discover -s tests -v
+          node --test tests/*.test.mjs
+
+      - name: 休市日を取得して計算
+        id: build
+        run: python3 scripts/build.py
+
+      - name: 変更があればコミット
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add -A data site/data
+            git commit -m "休市日データ更新（〜${{ steps.build.outputs.last }}）"
+            git push
+          else
+            echo "変更なし"
+          fi
+
+      - name: 翌年分が未登録なら Issue で知らせる
+        if: steps.build.outputs.missing_next_year == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          YEAR: ${{ steps.build.outputs.next_year }}
+        run: |
+          title="${YEAR}年の休市日がまだ登録されていません"
+          if [ -z "$(gh issue list --state open --search "in:title ${title}" --json number --jq '.[].number')" ]; then
+            gh issue create --title "$title" --body "12月に入りましたが、元カレンダーに${YEAR}年の休市日がまだありません。高知青果市場のサイト（https://kochi-seika.jp/）と高知市の市場カレンダーを確認してください。登録されれば次回の自動更新で反映されます。"
+          fi
+
+      - name: Pages 用ファイルを用意
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: update
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
