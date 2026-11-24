@@ -6,17 +6,42 @@ import { fixtureData as data } from "./fixture-data.mjs";
 
 const cal = makeCalendar(data);
 
-test("お盆前：8/12は★4日分を通知", () => {
-  const m = buildMessage(cal, "2027-08-12");
-  assert.match(m, /明日 8\/12\(木\) は 🟧★4日分 の発注です/);
-  assert.match(m, /対象：8\/13\(金\)〜8\/16\(月\)/);
-  assert.match(m, /次の発注日：8\/16\(月\)/);
-  assert.match(m, /通常の週なら 1日分（8\/14\(土\) 休市、8\/16\(月\) 休市）/);
-  assert.match(m, /https:\/\/watanabe-masao\.github\.io\/seika-order-calendar\//);
+test("お盆前：前日の配信（8/11）", () => {
+  const m = buildMessage(cal, "2027-08-12", "eve");
+  assert.equal(m, [
+    "【青果 発注のお知らせ】",
+    "明日 8/12(木) は 🟧★4日分 の発注",
+    "8/13(金)〜8/15(日) は発注ありません",
+    "",
+    "次回の発注は 8/16(月)  2日分発注",
+    "https://watanabe-masao.github.io/seika-order-calendar/",
+  ].join("\n"));
 });
 
-test("年末：12/28は★7日分", () => {
-  assert.match(buildMessage(cal, "2026-12-28"), /🟧★7日分/);
+test("お盆前：当日の配信（8/12）", () => {
+  const m = buildMessage(cal, "2027-08-12", "day");
+  assert.match(m, /^【青果 発注のお知らせ】\n本日 8\/12\(木\) は 🟧★4日分 の発注\n明日から 8\/15\(日\) まで発注ありません\n\n次回の発注は 8\/16\(月\)  2日分発注\n/);
+});
+
+test("翌日だけ発注なしなら「明日は発注ありません」", () => {
+  let found = null;
+  for (let d = new Date(2025, 0, 1); d.getFullYear() <= 2027 && !found; d.setDate(d.getDate() + 1)) {
+    const s = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    const m = buildMessage(cal, s, "day");
+    if (m && m.includes("\n明日は発注ありません\n")) found = s;
+  }
+  assert.ok(found, "該当日が見つからない");
+});
+
+test("年末：12/28は★7日分、次回は1/4", () => {
+  const m = buildMessage(cal, "2026-12-28", "eve");
+  assert.match(m, /🟧★7日分/);
+  assert.match(m, /12\/29\(火\)〜1\/3\(日\) は発注ありません/);
+  assert.match(m, /次回の発注は 1\/4\(月\)  2日分発注/);
+});
+
+test("データ末尾は次回未確定", () => {
+  assert.match(buildMessage(cal, "2027-12-28", "eve"), /翌年の休市日の公開後に確定/);
 });
 
 test("通常の発注日・発注できない日は通知しない", () => {

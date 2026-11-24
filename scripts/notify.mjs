@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // LINE公式アカウントから、まとめ発注・いつもと違う発注日の前日にお知らせを一斉配信する。
 //
-//   node scripts/notify.mjs                    # 今日（JST）の翌日が対象。送信する
+//   node scripts/notify.mjs --when eve         # 前日の配信：明日（JST）の発注日が対象
+//   node scripts/notify.mjs --when day         # 当日の配信：今日（JST）の発注日が対象
 //   node scripts/notify.mjs --dry-run          # 送らずに本文だけ表示
 //   node scripts/notify.mjs --date 2027-08-12  # 対象日（発注日）を指定
 //
@@ -10,7 +11,8 @@
 // 通知する日：発注できる日のうち、次のどちらか
 //   - 3日分以上（🟧）
 //   - 通常の週（日・水休み）と日数が違う（★）
-// 発注できない日は個別に通知せず、前の通知に「次の発注日」として書く。
+// 同じ発注日について「前日」と「当日」の2回送る。
+// 発注できない日は個別に通知せず、通知の中に「発注ありません」「次回の発注」として書く。
 import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { dirname, join, resolve } from "node:path";
@@ -28,27 +30,34 @@ export function shouldNotify(r) {
 }
 
 // 発注日 date の通知本文。通知しない日は null
-export function buildMessage(cal, date) {
+//   when: "eve"=前日に送る（明日の発注） / "day"=当日に送る（本日の発注）
+export function buildMessage(cal, date, when = "eve") {
   const r = cal.info(date);
   if (!shouldNotify(r)) return null;
   const open = r.status === "okOpenEnd";
+  const head = when === "day" ? "本日" : "明日";
   const lines = [
     "【青果 発注のお知らせ】",
-    `明日 ${md(date)} は ${mark(r.n)}${r.irregular ? "★" : ""}${r.n}日分${open ? "以上" : ""} の発注です`,
-    `・納品：${md(r.delivery)}`,
-    `・対象：${md(r.delivery)}〜${md(r.until)}`,
+    `${head} ${md(date)} は ${mark(r.n)}${r.irregular ? "★" : ""}${r.n}日分${open ? "以上" : ""} の発注`,
   ];
-  if (!open) lines.push(`・次の発注日：${md(r.until)}`);
-  if (r.irregular) {
-    const u = r.usual;
-    const days = [];
-    for (let t = add(date, 1); t <= add(r.until, 1); t = add(t, 1)) {
-      const k = cal.dayIrregular(t);
-      if (k) days.push(`${md(t)} ${k === "closed" ? "休市" : "開市"}`);
+  // 次の発注日までの「発注なし」の日
+  const next = r.until; // 次の納品日の前日＝次の発注日
+  if (!open) {
+    const from = add(date, 1), to = add(next, -1);
+    if (from <= to) {
+      if (when === "day") {
+        lines.push(from === to ? "明日は発注ありません" : `明日から ${md(to)} まで発注ありません`);
+      } else {
+        lines.push(from === to ? `${md(from)} は発注ありません` : `${md(from)}〜${md(to)} は発注ありません`);
+      }
     }
-    lines.push(`・通常の週なら ${u.status === "ng" ? "発注不可" : u.n + "日分"}${days.length ? "（" + days.join("、") + "）" : ""}`);
+    const nr = cal.info(next);
+    const nn = nr.status === "ok" ? `${nr.n}日分` : nr.status === "okOpenEnd" ? `${nr.n}日分以上` : "日数未定";
+    lines.push("", `次回の発注は ${md(next)}  ${nn}発注`);
+  } else {
+    lines.push("", "次回の発注日は、翌年の休市日の公開後に確定します");
   }
-  lines.push("", PAGE_URL);
+  lines.push(PAGE_URL);
   return lines.join("\n");
 }
 
@@ -90,16 +99,17 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   const opt = k => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : undefined; };
   const dryRun = args.includes("--dry-run");
   const todayJst = new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Tokyo" }).format(new Date());
-  const date = opt("--date") || add(todayJst, 1);
+  const when = opt("--when") === "day" ? "day" : "eve";
+  const date = opt("--date") || (when === "day" ? todayJst : add(todayJst, 1));
 
   const data = JSON.parse(readFileSync(join(ROOT, "site/data/calendar.json"), "utf-8"));
   const cal = makeCalendar(data, DEFAULT_RULES);
-  const text = buildMessage(cal, date);
+  const text = buildMessage(cal, date, when);
   if (!text) {
     console.log(`${date}：通知対象ではありません（${cal.info(date).status}${cal.info(date).n ? " " + cal.info(date).n + "日分" : ""}）`);
     process.exit(0);
   }
-  console.log(`${date}：通知します\n----\n${text}\n----`);
+  console.log(`${date}（${when === "day" ? "当日" : "前日"}の配信）：通知します\n----\n${text}\n----`);
   if (dryRun) { console.log("（--dry-run のため送信しません）"); process.exit(0); }
   const token = process.env.LINE_CHANNEL_ACCESS_TOKEN;
   if (!token) {

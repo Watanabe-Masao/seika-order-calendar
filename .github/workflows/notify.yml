@@ -2,12 +2,18 @@ name: LINE通知
 
 on:
   schedule:
-    # 毎日 17:07 JST（cron はUTC）。翌日がまとめ発注・いつもと違う発注日なら配信
-    - cron: "7 8 * * *"
+    # cron はUTC。対象の発注日について「前日」と「当日」の2回配信する
+    - cron: "7 6 * * *"   # 前日の配信 15:07 JST（明日が対象）
+    - cron: "7 22 * * *"  # 当日の配信  7:07 JST（今日が対象）
   workflow_dispatch:
     inputs:
+      when:
+        description: "eve=前日の配信（明日が対象） / day=当日の配信（今日が対象）"
+        type: choice
+        options: [eve, day]
+        default: eve
       date:
-        description: "対象の発注日（YYYY-MM-DD）。空なら明日"
+        description: "対象の発注日（YYYY-MM-DD）。空なら when に応じて明日／今日"
         required: false
         default: ""
       dry_run:
@@ -30,10 +36,14 @@ jobs:
       - name: 通知
         env:
           LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+          SCHEDULE: ${{ github.event.schedule }}
+          WHEN: ${{ inputs.when }}
           DATE: ${{ inputs.date }}
           DRY_RUN: ${{ inputs.dry_run }}
         run: |
-          args=()
+          if [ "$SCHEDULE" = "7 22 * * *" ]; then WHEN=day; fi
+          if [ -z "$WHEN" ]; then WHEN=eve; fi
+          args=(--when "$WHEN")
           if [ -n "$DATE" ]; then args+=(--date "$DATE"); fi
           if [ "$DRY_RUN" = "true" ]; then args+=(--dry-run); fi
           node scripts/notify.mjs "${args[@]}"

@@ -55,21 +55,30 @@ site/ を GitHub Pages に配置（index.html が calendar.json と order.js で
 
 ## LINE通知
 
-`.github/workflows/notify.yml` が毎日 17:07（JST）に動き、**翌日が次のどちらかの発注日なら** LINE公式アカウントから友だち全員に配信する（ブロードキャスト）。
+`.github/workflows/notify.yml` が、対象の発注日について **前日 15:07** と **当日 7:07**（JST）の2回、LINE公式アカウントから友だち全員に配信する（ブロードキャスト）。対象は次のどちらかの発注日。
 
 - 🟧 3日分以上のまとめ発注
 - ★ 通常の週（日・水休み）と日数が違う発注日
 
-発注できない日は個別に通知せず、前の通知に「次の発注日」として書く。2027年の配信は月0〜5回。
+発注できない日は個別に通知せず、通知の中に「発注ありません」「次回の発注」として書く。2027年の対象日は月0〜5日（配信は2回ずつなので月0〜10回）。
 
+前日（8/11 15時）
 ```
 【青果 発注のお知らせ】
-明日 8/12(木) は 🟧★4日分 の発注です
-・納品：8/13(金)
-・対象：8/13(金)〜8/16(月)
-・次の発注日：8/16(月)
-・通常の週なら 1日分（8/14(土) 休市、8/16(月) 休市）
+明日 8/12(木) は 🟧★4日分 の発注
+8/13(金)〜8/15(日) は発注ありません
 
+次回の発注は 8/16(月)  2日分発注
+https://watanabe-masao.github.io/seika-order-calendar/
+```
+
+当日（8/12 7時）
+```
+【青果 発注のお知らせ】
+本日 8/12(木) は 🟧★4日分 の発注
+明日から 8/15(日) まで発注ありません
+
+次回の発注は 8/16(月)  2日分発注
 https://watanabe-masao.github.io/seika-order-calendar/
 ```
 
@@ -79,7 +88,7 @@ https://watanabe-masao.github.io/seika-order-calendar/
 2. アカウントの「設定 → Messaging API」で Messaging API を有効にする（プロバイダーを作成）
 3. [LINE Developers](https://developers.line.biz/console/) で、そのチャネルの「Messaging API設定 → チャネルアクセストークン（長期）」を発行
 4. GitHub の Settings → Secrets and variables → Actions に `LINE_CHANNEL_ACCESS_TOKEN` として登録
-5. Actions →「LINE通知」→ Run workflow（`date` に `2027-08-12`、`dry_run` オン）で本文を確認 → `dry_run` オフで実際に届くか確認
+5. Actions →「LINE通知」→ Run workflow（`when` を選び、`date` に `2027-08-12`、`dry_run` オン）で本文を確認 → `dry_run` オフで実際に届くか確認
 6. 公式アカウントの友だち追加用QRコード・URLを配る
 
 - トークン未設定のときは送信せずに終わる（失敗にはしない）。
@@ -93,7 +102,7 @@ python3 -m unittest discover -s tests -v
 node --test tests/*.test.mjs
 python3 scripts/build.py --offline   # data/raw/*.ics から作り直す
 node scripts/feeds.mjs               # site/cal/seika.ics を作成
-node scripts/notify.mjs --date 2027-08-12 --dry-run   # 通知本文を確認
+node scripts/notify.mjs --date 2027-08-12 --when day --dry-run   # 通知本文を確認（eve=前日 / day=当日）
 python3 -m http.server -d site 8000  # http://localhost:8000
 ```
 
