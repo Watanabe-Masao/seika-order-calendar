@@ -2,9 +2,14 @@ name: LINE通知
 
 on:
   schedule:
-    # cron はUTC
-    - cron: "7 6 * * *"   # 前日の予告 15:07 JST：明日が🟧・★の発注日なら配信
-    - cron: "7 22 * * *"  # 当日の通知  7:07 JST：今日が発注日なら配信
+    # cron はUTC。GitHub のスケジュール実行は遅れたり実行されなかったりすることがあるため、
+    # 30分おきに複数回動かす。同じ日・同じ本文は LINE 側のリトライキーで受付済みになり、二重には届かない。
+    - cron: "7 6 * * *"    # 前日の予告 15:07 JST
+    - cron: "37 6 * * *"   # 前日の予告 15:37 JST（予備）
+    - cron: "7 7 * * *"    # 前日の予告 16:07 JST（予備）
+    - cron: "7 22 * * *"   # 当日の通知  7:07 JST
+    - cron: "37 22 * * *"  # 当日の通知  7:37 JST（予備）
+    - cron: "7 23 * * *"   # 当日の通知  8:07 JST（予備）
   workflow_dispatch:
     inputs:
       when:
@@ -42,12 +47,13 @@ jobs:
           DATE: ${{ inputs.date }}
           DRY_RUN: ${{ inputs.dry_run }}
         run: |
+          args=()
           case "$SCHEDULE" in
-            "7 6 * * *")  WHEN=eve ;;
-            "7 22 * * *") WHEN=day ;;
+            "7 6 * * *"|"37 6 * * *"|"7 7 * * *")    WHEN=eve; args+=(--scheduled) ;;
+            "7 22 * * *"|"37 22 * * *"|"7 23 * * *") WHEN=day; args+=(--scheduled) ;;
           esac
           if [ -z "$WHEN" ]; then WHEN=day; fi
-          args=(--when "$WHEN")
+          args+=(--when "$WHEN")
           if [ -n "$DATE" ]; then args+=(--date "$DATE"); fi
           if [ "$DRY_RUN" = "true" ]; then args+=(--dry-run); fi
           node scripts/notify.mjs "${args[@]}"

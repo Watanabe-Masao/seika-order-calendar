@@ -129,6 +129,17 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   const when = opt("--when") === "eve" ? "eve" : "day";
   const date = opt("--date") || (when === "day" ? todayJst : add(todayJst, 1));
 
+  // スケジュール実行が大きく遅れて日付をまたいだら、別の日のお知らせになるので送らない
+  //   当日の通知（7時予定）：JST 0〜5時に動いたら中止
+  //   前日の予告（15時予定）：JST 0〜11時に動いたら中止
+  if (args.includes("--scheduled") && !opt("--date")) {
+    const hour = Number(new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Tokyo", hour: "numeric", hourCycle: "h23" }).format(new Date()));
+    if ((when === "day" && hour < 6) || (when === "eve" && hour < 12)) {
+      console.log(`::warning::予定より大きく遅れて実行されたため送信しませんでした（JST ${hour}時、${when === "day" ? "当日" : "前日"}の配信）`);
+      process.exit(0);
+    }
+  }
+
   const data = JSON.parse(readFileSync(join(ROOT, "site/data/calendar.json"), "utf-8"));
   const cal = makeCalendar(data, DEFAULT_RULES);
   const text = buildMessage(cal, date, when);
