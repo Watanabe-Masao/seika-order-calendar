@@ -21,6 +21,9 @@ import { fileURLToPath } from "node:url";
 import { makeCalendar, DEFAULT_RULES, parse, add } from "../site/order.js";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+// 送信の締切（JST）。これを過ぎたスケジュール実行は送らない
+export const DAY_DEADLINE = process.env.NOTIFY_DAY_DEADLINE || "08:15";
+export const EVE_DEADLINE = process.env.NOTIFY_EVE_DEADLINE || "17:00";
 export const PAGE_URL = "https://watanabe-masao.github.io/seika-order-calendar/";
 const WD = "日月火水木金土";
 const md = s => { const d = parse(s); return `${d.getMonth() + 1}/${d.getDate()}(${WD[d.getDay()]})`; };
@@ -85,9 +88,9 @@ export function buildMessage(cal, date, when = "day") {
   return lines.join("\n");
 }
 
-// 同じ対象日・本文なら同じ値になる UUID（再実行しても二重送信しない）
-export function retryKey(date, text) {
-  const h = createHash("sha256").update(`seika-order-calendar|${date}|${text}`).digest("hex");
+// 「発注日×通知の種類」で決まる UUID（本文が変わっても、同じ通知は再実行で二重送信しない）
+export function retryKey(date, when) {
+  const h = createHash("sha256").update(`seika-order-calendar|${date}|${when}`).digest("hex");
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(13, 16)}-a${h.slice(17, 20)}-${h.slice(20, 32)}`;
 }
 
@@ -129,13 +132,13 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   const when = opt("--when") === "eve" ? "eve" : "day";
   const date = opt("--date") || (when === "day" ? todayJst : add(todayJst, 1));
 
-  // スケジュール実行が大きく遅れて日付をまたいだら、別の日のお知らせになるので送らない
-  //   当日の通知（7時予定）：JST 0〜5時に動いたら中止
-  //   前日の予告（15時予定）：JST 0〜11時に動いたら中止
+  // 送信できる時間帯（JST）。スケジュール実行が遅れて締切を過ぎたら送らない
+  //   当日の通知：6:00〜DAY_DEADLINE、前日の予告：12:00〜EVE_DEADLINE
   if (args.includes("--scheduled") && !opt("--date")) {
-    const hour = Number(new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Tokyo", hour: "numeric", hourCycle: "h23" }).format(new Date()));
-    if ((when === "day" && hour < 6) || (when === "eve" && hour < 12)) {
-      console.log(`::warning::予定より大きく遅れて実行されたため送信しませんでした（JST ${hour}時、${when === "day" ? "当日" : "前日"}の配信）`);
+    const now = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Tokyo", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date());
+    const [from, until] = when === "day" ? ["06:00", DAY_DEADLINE] : ["12:00", EVE_DEADLINE];
+    if (now < from || now > until) {
+      console.log(`::warning::送信できる時間帯（${from}〜${until}）の外で実行されたため送信しませんでした（JST ${now}、${when === "day" ? "当日" : "前日"}の配信）`);
       process.exit(0);
     }
   }
@@ -157,7 +160,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   }
   try {
     const to = process.env.LINE_GROUP_ID || "";
-    const r = await send(token, text, retryKey(date, text), to);
+    const r = await send(token, text, retryKey(date, when), to);
     console.log(`${to ? "グループ" : "友だち全員"}へ${r === "sent" ? "送信しました" : "：同じ内容は送信済みです"}`);
   } catch (e) {
     console.error(`::error::${e.message}`);

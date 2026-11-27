@@ -68,10 +68,11 @@ test("2027年の配信は月18〜21回", () => {
   assert.ok(Math.min(...v) >= 18 && Math.max(...v) <= 21, JSON.stringify(per));
 });
 
-test("リトライキーは同じ内容なら同じ・UUID形式", () => {
-  const a = retryKey("2027-08-12", "x"), b = retryKey("2027-08-12", "x"), c = retryKey("2027-08-13", "x");
+test("リトライキーは発注日×種類で固定・UUID形式", () => {
+  const a = retryKey("2027-08-12", "day"), b = retryKey("2027-08-12", "day"), c = retryKey("2027-08-13", "day"), e = retryKey("2027-08-12", "eve");
   assert.equal(a, b);
   assert.notEqual(a, c);
+  assert.notEqual(a, e);
   assert.match(a, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-a[0-9a-f]{3}-[0-9a-f]{12}$/);
 });
 
